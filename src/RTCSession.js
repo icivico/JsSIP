@@ -387,9 +387,6 @@ RTCSession.prototype.sendMessage = function(text, options) {
   }
 
   var message = new Message(this);
-//  dtmf.on('failed', function(){ready = false;});
-//  tone = tones[possition];
-//  possition += 1;
   message.send(text, options);
 };
 
