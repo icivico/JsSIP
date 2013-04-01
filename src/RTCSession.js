@@ -12,6 +12,7 @@
 var RequestSender   = @@include('../src/RTCSession/RequestSender.js')
 var RTCMediaHandler = @@include('../src/RTCSession/RTCMediaHandler.js')
 var DTMF            = @@include('../src/RTCSession/DTMF.js')
+var Message         = @@include('../src/RTCSession/Message.js')
 
 var RTCSession,
   LOG_PREFIX = JsSIP.name +' | '+ 'RTC SESSION' +' | ',
@@ -35,7 +36,8 @@ RTCSession = function(ua) {
   'failed',
   'started',
   'ended',
-  'newDTMF'
+  'newDTMF',
+  'newMessage'
   ];
 
   this.ua = ua;
@@ -360,6 +362,36 @@ RTCSession.prototype.sendDTMF = function(tones, options) {
   );
 };
 
+/**
+ * Send a Message
+ *
+ * @param {String} text
+ * @param {Object} [options]
+ */
+RTCSession.prototype.sendMessage = function(text, options) {
+
+  options = options || {};
+
+  if (text === undefined) {
+    throw new TypeError('Not enough arguments');
+  }
+
+  // Check Session Status
+  if (this.status !== C.STATUS_CONFIRMED && this.status !== C.STATUS_WAITING_FOR_ACK) {
+    throw new JsSIP.Exceptions.InvalidStateError(this.status);
+  }
+
+  // Check tones
+  if (!text || typeof text !== 'string') {
+    throw new TypeError('Invalid data type');
+  }
+
+  var message = new Message(this);
+//  dtmf.on('failed', function(){ready = false;});
+//  tone = tones[possition];
+//  possition += 1;
+  message.send(text, options);
+};
 
 /**
  * RTCPeerconnection handlers
@@ -707,6 +739,13 @@ RTCSession.prototype.receiveRequest = function(request) {
             new DTMF(this).init_incoming(request);
           }
         }
+	break;
+      case JsSIP.C.MESSAGE:
+        if(this.status === C.STATUS_CONFIRMED || this.status === C.STATUS_WAITING_FOR_ACK) {
+          new Message(this).init_incoming(request);
+        }
+	break;
+
     }
   }
 };
