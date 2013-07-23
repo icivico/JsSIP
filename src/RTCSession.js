@@ -199,6 +199,8 @@ RTCSession.prototype.answer = function(options) {
       var
         // run for reply success callback
         replySucceeded = function() {
+          var timeout = JsSIP.Timers.T1;
+
           self.status = C.STATUS_WAITING_FOR_ACK;
 
           /**
@@ -206,24 +208,24 @@ RTCSession.prototype.answer = function(options) {
            * Response retransmissions cannot be accomplished by transaction layer
            *  since it is destroyed when receiving the first 2xx answer
            */
-          self.timers.invite2xxTimer = window.setTimeout(function invite2xxRetransmission(retransmissions) {
-              retransmissions = retransmissions || 1;
-
-              var timeout = JsSIP.Timers.T1 * (Math.pow(2, retransmissions));
-
-              if((retransmissions * JsSIP.Timers.T1) <= JsSIP.Timers.T2) {
-                retransmissions += 1;
-
-                request.reply(200, null, ['Contact: '+ self.contact], body);
-
-                self.timers.invite2xxTimer = window.setTimeout(invite2xxRetransmission(retransmissions),
-                  timeout
-                );
-              } else {
-                window.clearTimeout(self.timers.invite2xxTimer);
+          self.timers.invite2xxTimer = window.setTimeout(function invite2xxRetransmission() {
+              if (self.status !== C.STATUS_WAITING_FOR_ACK) {
+                return;
               }
+
+              request.reply(200, null, ['Contact: '+ self.contact], body);
+
+              if (timeout < JsSIP.Timers.T2) {
+                timeout = timeout * 2;
+                if (timeout > JsSIP.Timers.T2) {
+                  timeout = JsSIP.Timers.T2;
+                }
+              }
+              self.timers.invite2xxTimer = window.setTimeout(
+                invite2xxRetransmission, timeout
+              );
             },
-            JsSIP.Timers.T1
+            timeout
           );
 
           /**
@@ -451,7 +453,9 @@ RTCSession.prototype.init_incoming = function(request) {
   }
 
   //Initialize Media Session
-  this.rtcMediaHandler = new RTCMediaHandler(this);
+  this.rtcMediaHandler = new RTCMediaHandler(this,
+    {"optional": [{'DtlsSrtpKeyAgreement': 'true'}]}
+  );
   this.rtcMediaHandler.onMessage(
     'offer',
     request.body,
@@ -697,15 +701,13 @@ RTCSession.prototype.receiveRequest = function(request) {
     * established.
     */
 
-    // Reply 487
-    this.request.reply(487);
-
     /*
     * Terminate the whole session in case the user didn't accept nor reject the
     *request opening the session.
     */
     if(this.status === C.STATUS_WAITING_FOR_ANSWER) {
       this.status = C.STATUS_CANCELED;
+      this.request.reply(487);
       this.failed('remote', request, JsSIP.C.causes.CANCELED);
     }
   } else {
@@ -873,6 +875,11 @@ RTCSession.prototype.receiveResponse = function(response) {
         break;
       }
 
+      // An error on dialog creation will fire 'failed' event
+      if (!this.createDialog(response, 'UAC')) {
+        break;
+      }
+
       this.rtcMediaHandler.onMessage(
         'answer',
         response.body,
@@ -881,13 +888,8 @@ RTCSession.prototype.receiveResponse = function(response) {
          * SDP Answer fits with Offer. Media will start
          */
         function() {
-          // An error on dialog creation will fire 'failed' event
-          if (!session.createDialog(response, 'UAC')) {
-            return;
-          }
-
-          session.sendACK();
           session.status = C.STATUS_CONFIRMED;
+          session.sendACK();
           session.started('remote', response);
         },
         /*
@@ -1061,6 +1063,7 @@ RTCSession.prototype.started = function(originator, message) {
   session.start_time = new Date();
 
   session.emit(event_name, session, {
+    originator: originator,
     response: message || null
   });
 };

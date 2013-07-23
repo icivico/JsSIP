@@ -379,7 +379,7 @@ UA.prototype.onTransportConnected = function(transport) {
       this.registrator = new JsSIP.Registrator(this, transport);
       this.register();
     }
-  } else {
+  } else if (!this.registrator) {
     this.registrator = new JsSIP.Registrator(this, transport);
   }
 };
@@ -460,7 +460,6 @@ UA.prototype.receiveRequest = function(request) {
         request.reply(481);
         break;
       case JsSIP.C.CANCEL:
-        request.reply(200);
         session = this.findSession(request);
         if(session) {
           session.receiveRequest(request);
@@ -797,6 +796,9 @@ UA.prototype.loadConfig = function(configuration) {
       case 'uri':
       case 'registrar_server':
         console.log('· ' + parameter + ': ' + settings[parameter]);
+        break;
+      case 'password':
+        console.log('· ' + parameter + ': ' + 'NOT SHOWN');
         break;
       default:
         console.log('· ' + parameter + ': ' + window.JSON.stringify(settings[parameter]));
