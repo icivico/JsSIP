@@ -1,9 +1,9 @@
 /**
- * @fileoverview DTMF
+ * @fileoverview Message 
  */
 
 /**
- * @class DTMF
+ * @class Message
  * @param {JsSIP.RTCSession} session
  */
 (function(JsSIP) {
