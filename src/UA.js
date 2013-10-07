@@ -68,7 +68,6 @@ UA = function(configuration) {
 
   this.configuration = {};
   this.dialogs = {};
-  this.registrator = null;
 
   //User actions outside any session/dialog (MESSAGE)
   this.applicants = {};
@@ -86,6 +85,7 @@ UA = function(configuration) {
   };
 
   this.transportRecoverAttempts = 0;
+  this.transportRecoveryTimer = null;
 
   /**
    * Load configuration
@@ -106,6 +106,9 @@ UA = function(configuration) {
     this.error = C.CONFIGURATION_ERROR;
     throw e;
   }
+  
+  // Initialize registrator
+  this.registrator = new JsSIP.Registrator(this);
 };
 UA.prototype = new JsSIP.EventEmitter();
 
@@ -139,7 +142,7 @@ UA.prototype.unregister = function(options) {
  * @param {Boolean}
  */
 UA.prototype.isRegistered = function() {
-  if(this.registrator && this.registrator.registered) {
+  if(this.registrator.registered) {
     return true;
   } else {
     return false;
@@ -206,12 +209,13 @@ UA.prototype.stop = function() {
     console.warn('UA already closed');
     return;
   }
+  
+  // Clear transportRecoveryTimer
+  window.clearTimeout(this.transportRecoveryTimer);
 
   // Close registrator
-  if(this.registrator) {
-    console.log(LOG_PREFIX +'closing registrator');
-    this.registrator.close();
-  }
+  console.log(LOG_PREFIX +'closing registrator');
+  this.registrator.close();
 
   // Run  _terminate_ on every Session
   for(session in this.sessions) {
@@ -374,14 +378,7 @@ UA.prototype.onTransportConnected = function(transport) {
   });
 
   if(this.configuration.register) {
-    if(this.registrator) {
-      this.registrator.onTransportConnected();
-    } else {
-      this.registrator = new JsSIP.Registrator(this, transport);
-      this.register();
-    }
-  } else if (!this.registrator) {
-    this.registrator = new JsSIP.Registrator(this, transport);
+    this.registrator.onTransportConnected();
   }
 };
 
@@ -599,9 +596,7 @@ UA.prototype.closeSessionsOnTransportError = function() {
     this.sessions[idx].onTransportError();
   }
   // Call registrator _onTransportClosed_
-  if(this.registrator){
-    this.registrator.onTransportClosed();
-  }
+  this.registrator.onTransportClosed();
 };
 
 UA.prototype.recoverTransport = function(ua) {
@@ -628,7 +623,7 @@ UA.prototype.recoverTransport = function(ua) {
 
   console.log(LOG_PREFIX + 'next connection attempt in '+ nextRetry +' seconds');
 
-  window.setTimeout(
+  this.transportRecoveryTimer = window.setTimeout(
     function(){
       ua.transportRecoverAttempts = count + 1;
       new JsSIP.Transport(ua, server);
