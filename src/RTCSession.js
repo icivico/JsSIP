@@ -563,7 +563,8 @@ RTCSession.prototype.sendMessage = function(text, options) {
   var message = new Message(this);
   message.send(text, options);
 };
-=======
+
+/**
  * Send a generic in-dialog Request
  *
  * @param {String} method
